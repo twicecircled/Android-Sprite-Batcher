@@ -12,10 +12,13 @@ Get a copy of the repo by either:
 
 You have two options:
 1. Using a library project:
+
 	- Import the entire Android-Sprite-Batcher project folder into Eclipse using File -> Import -> Existing Android Code Into Workspace. 
 	- Right click on the newly imported project and click Properties -> Android -> check 'Is Library'
 	- Right click on your application that you want to use Sprite Batcher in and click Properties -> Android -> Under libraries click 'add' and select the Android-Sprite-Batcher.
+
 2. Using a JAR:
+
 	- Simply copy the Android-Sprite-Batcher-vX.X.jar from the releases folder into the lib folder of your Android project.
 	- Note: you will not have access to the javadoc markup by going this route, whereas if you use the library project you will.
 
