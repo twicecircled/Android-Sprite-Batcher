@@ -20,6 +20,6 @@ Sprite Batcher is a tool to help draw 2D sprites in Android using OpenGL. It han
 
 *NB The first 1m40s of the first video shows you how to grab the code from my personal website www.ionage.co.uk. As you have already got the code from GitHub you can skip that bit.*
 
-[Video 1]{http://youtu.be/xc93rN2CGNw "How to use SpriteBatcher 1"}
+[Video 1](http://youtu.be/xc93rN2CGNw "How to use SpriteBatcher 1")
 
-[Video 2]{http://youtu.be/cCTi0xvlXGY "How to use SpriteBatcher 2"}
+[Video 2](http://youtu.be/cCTi0xvlXGY "How to use SpriteBatcher 2")
