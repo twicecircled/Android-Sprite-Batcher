@@ -1,7 +1,5 @@
 package com.twicecircled.spritebatcher;
 
-import java.util.ArrayList;
-
 import javax.microedition.khronos.opengles.GL10;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -42,7 +40,18 @@ public class FontTexture extends Texture {
 		this.tf = tf;
 	}
 
-	public void drawText(GL10 gl, String text, int x, int y, float scale, int argb) {
+	protected void setParams(FontParams params) {
+		this.size = params.getSize();
+		this.colour = params.getArgb();
+		this.charStart = params.getcharStart();
+		this.charEnd = params.getCharEnd();
+		this.charUnknown = params.getCharUnknown();
+		this.padX = params.getPadX();
+		this.padY = params.getPadY();
+	}
+
+	public void drawText(GL10 gl, String text, int x, int y, float scale,
+			int argb) {
 		// Draw text centred at x,y
 		// Get width of text
 		int textWidth = 0;

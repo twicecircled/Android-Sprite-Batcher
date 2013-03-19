@@ -193,7 +193,7 @@ public class SpriteBatcher implements Renderer {
 
 		// Iterate over textures
 		Texture currentTexture;
-		for (int i=0;i<texturesByResourceId.size();i++) {
+		for (int i = 0; i < texturesByResourceId.size(); i++) {
 			currentTexture = texturesByResourceId.valueAt(i);
 			// Assign texture id
 			currentTexture.setTextureId(textureIds[i]);
@@ -202,6 +202,16 @@ public class SpriteBatcher implements Renderer {
 		}
 	}
 
+	/**
+	 * Prematurely batch off all 'draws' made so far. This can be useful for
+	 * layering your sprites as all draws made so far will be below any
+	 * subsequent draws. NB Prematurely batching off your sprites is less
+	 * efficient and should be avoided where possible, by default sprites are
+	 * drawn in the order that you pass in the drawable resource ids in
+	 * SpriteBatcher's constructor.
+	 * 
+	 * @param gl
+	 */
 	public void batchDraw(GL10 gl) {
 		// All the draw commands are already batched together for each seperate
 		// texture tile. Now we loop through each tile and make the draw calls
@@ -320,15 +330,45 @@ public class SpriteBatcher implements Renderer {
 		texture.setDimensions(bitmap.getWidth(), bitmap.getHeight());
 	}
 
+	/**
+	 * Returns the width of the drawing canvas in DIPS. Use this to scale your
+	 * sprites if you wish them to take up a proportion of the GLSurfaceView.
+	 * 
+	 * @return
+	 */
 	public int getViewWidth() {
 		return width;
 	}
 
+	/**
+	 * Returns the height of the drawing canvas in DIPS. Use this to scale your
+	 * sprites if you wish them to take up a proportion of the GLSurfaceView.
+	 * 
+	 * @return
+	 */
 	public int getViewHeight() {
 		return height;
 	}
 
-	// ----------- ADD SPRITE METHODS --------------------
+	/**
+	 * Modify the default font params. Note this method should be called prior
+	 * to calling setRenderer(SpriteBatcher) on you GLSurfaceView otherwise the
+	 * new params may not be realised.
+	 * 
+	 * @param params
+	 */
+	public void setFontParams(FontParams params) {
+		Texture texture = texturesByResourceId.get(params.getId());
+		if (texture != null && texture.getClass() == FontTexture.class) {
+			FontTexture fontTexture = (FontTexture) texture;
+			fontTexture.setParams(params);
+		} else {
+			Log.w(TAG,
+					"Warning: Could not recognise resource id in FontParams. Has it been passed into the the constructor?");
+		}
+	}
+
+	// ----------- DRAW METHODS --------------------
 
 	// SIMPLE
 	public void draw(GL10 gl, int resourceId, Rect src, Rect dst) {
@@ -366,12 +406,52 @@ public class SpriteBatcher implements Renderer {
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
+	/**
+	 * Draw opaque white text.
+	 * 
+	 * @param gl
+	 * @param resourceId
+	 *            Id of the string resource that contains the path of your font.
+	 *            Should be the same as passed into SpriteBatcher's constructor.
+	 * @param text
+	 *            text to draw
+	 * @param x
+	 *            position of text, x (centre)
+	 * @param y
+	 *            position of text, y (centre)
+	 * @param scale
+	 *            change size of text using post scaling. For the best quality
+	 *            leave as 1 and change the native size when creating each
+	 *            FontData object.
+	 */
 	public void drawText(GL10 gl, int resourceId, String text, int x, int y,
 			int scale) {
 		// Pass on with default argb value
 		drawText(gl, resourceId, text, x, y, scale, Texture.DEFAULT_ARGB);
 	}
 
+	/**
+	 * Draw text with a non-default ARGB values.
+	 * 
+	 * @param gl
+	 * @param resourceId
+	 *            Id of the string resource that contains the path of your font.
+	 *            Should be the same as passed into SpriteBatcher's constructor.
+	 * @param text
+	 *            text to draw
+	 * @param x
+	 *            position of text, x (centre)
+	 * @param y
+	 *            position of text, y (centre)
+	 * @param scale
+	 *            change size of text using post scaling. For the best quality
+	 *            leave as 1 and change the native size when creating each
+	 *            FontData object.
+	 * @param argb
+	 *            Hex representation of argb number. e.g. 0xFF0000FF for opaque
+	 *            blue text. You can use Android's Color to generate these on
+	 *            your behalf.
+	 */
 	public void drawText(GL10 gl, int resourceId, String text, int x, int y,
 			int scale, int argb) {
 		// Draw text. x and y are top left corner of text line
