@@ -22,17 +22,18 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
-
+import java.util.Iterator;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
-
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.opengl.GLSurfaceView.Renderer;
 import android.opengl.GLUtils;
 import android.util.Log;
+import android.util.SparseArray;
 
 public class SpriteBatcher implements Renderer {
 
@@ -42,22 +43,88 @@ public class SpriteBatcher implements Renderer {
 	private int width;
 	private int height;
 
-	// Holds all the information for our batched GLDRAWELEMENT calls
-	private int[] textureIds;
-	ArrayList<SpriteData> spriteData;
+	// A Texture object holds all the information to send a batch of sprites to
+	SparseArray<Texture> texturesByResourceId;
+	// ArrayList for consistent draw order
+	ArrayList<Texture> drawOrder;
 
 	// Needed to load bitmaps into OpenGL
-	int[] bitmapIds;
 	Resources resources;
 
-	public SpriteBatcher(Resources resources, int[] bitmapIds, Drawer drawer) {
-		// Temporarily stores for loading textures later:
-		this.bitmapIds = bitmapIds;
+	// Resource types
+	private static final String DRAWABLE = "drawable";
+	private static final String STRING = "string";
+
+	// For debugging
+	protected static final String TAG = "SpriteBatcher";
+
+	/**
+	 * Constructor.
+	 * 
+	 * @param resources
+	 * @param resourceIds
+	 *            valid resource ids are R.drawable.xxx for normal sprites or
+	 *            R.String.xxx where the string resource contains a path to a
+	 *            font.
+	 * @param drawer
+	 *            object implementing Drawer interface
+	 */
+	public SpriteBatcher(Resources resources, int[] resourceIds, Drawer drawer) {
+		// Need a reference to resources to load textures later
 		this.resources = resources;
-		// Create data structure to hold info for draw calls
-		textureIds = new int[bitmapIds.length];
-		spriteData = new ArrayList<SpriteData>(bitmapIds.length);
+
+		// Create texture objects for each resource id
+		setUpTextureObjects(resources, resourceIds);
+
 		this.drawer = drawer;
+	}
+
+	private void setUpTextureObjects(Resources resources, int[] resourceIds) {
+		texturesByResourceId = new SparseArray<Texture>();
+		drawOrder = new ArrayList<Texture>();
+		// Loop through resource ids and generate texture objects
+		String filePath;
+		Texture texture;
+		for (int i = 0; i < resourceIds.length; i++) {
+			try {
+				if (resources.getResourceTypeName(resourceIds[i]).equals(
+						DRAWABLE)) {
+					texture = new BasicTexture(resourceIds[i]);
+					texturesByResourceId.put(resourceIds[i], texture);
+					drawOrder.add(texture);
+				} else if (resources.getResourceTypeName(resourceIds[i])
+						.equals(STRING)) {
+					// Try to get font file from path in string
+					filePath = resources.getString(resourceIds[i]);
+					Typeface tf;
+					try {
+						tf = Typeface.createFromAsset(resources.getAssets(),
+								filePath);
+						if (tf == null) {
+							throw new Exception();
+						}
+					} catch (Exception e) {
+						Log.e(TAG,
+								"Error, could not create font from asset filePath: "
+										+ filePath, e);
+						// Skip on to next resource id
+						continue;
+					}
+					// Store font texture
+					texture = new FontTexture(tf);
+					texturesByResourceId.put(resourceIds[i], texture);
+					drawOrder.add(texture);
+				} else {
+					Log.w(TAG,
+							"Warning: resourceIds["
+									+ i
+									+ "] resource type not recognised. Must be a drawable or string.");
+				}
+			} catch (Resources.NotFoundException e) {
+				Log.e(TAG, "Error: resourceIds[" + i
+						+ "] not found. Not a resource id.", e);
+			}
+		}
 	}
 
 	@Override
@@ -120,12 +187,18 @@ public class SpriteBatcher implements Renderer {
 		gl.glEnable(GL10.GL_BLEND);
 		gl.glBlendFunc(GL10.GL_SRC_ALPHA, GL10.GL_ONE_MINUS_SRC_ALPHA);
 
-		// Load textures
+		// Get unique texture ids
+		int[] textureIds = new int[texturesByResourceId.size()];
 		gl.glGenTextures(textureIds.length, textureIds, 0);
-		for (int i = 0; i < bitmapIds.length; i++) {
-			addTexture(gl,
-					BitmapFactory.decodeResource(resources, bitmapIds[i]),
-					textureIds[i]);
+
+		// Iterate over textures
+		Texture currentTexture;
+		for (int i=0;i<texturesByResourceId.size();i++) {
+			currentTexture = texturesByResourceId.valueAt(i);
+			// Assign texture id
+			currentTexture.setTextureId(textureIds[i]);
+			// Load bitmap into openGL
+			addTexture(gl, resources, currentTexture, textureIds[i]);
 		}
 	}
 
@@ -135,66 +208,95 @@ public class SpriteBatcher implements Renderer {
 		// to OpenGL.
 		// NOTE: You can call this method early to send a batch. This gives you
 		// more control over layer order of the sprites.
-		for (int i = 0; i < textureIds.length; i++) {
-			// GRAB SPRITEDATA
-			SpriteData thisSpriteData = spriteData.get(i);
+		Texture currentTexture;
+		for (Iterator<Texture> i = drawOrder.iterator(); i.hasNext();) {
+			// GRAB TEXTURE
+			currentTexture = i.next();
+			SparseArray<SpriteData> array = currentTexture.getSpriteData();
 
-			// CONVERT INTO ARRAY
-			float[] vertices = thisSpriteData.getVertices();
-			short[] indices = thisSpriteData.getIndices();
-			float[] textureCoords = thisSpriteData.getTextureCoords();
+			// NB Each texture can have multiple spritedatas to support
+			// different gl.glColor4f(r, g, b, a) parameters. This allows alpha
+			// and colour effects
+			for (int j = 0; j < array.size(); j++) {
+				// GRAB SPRITEDATA
+				SpriteData currentSpriteData = array.valueAt(j);
 
-			// ONLY DRAW IF ALL NOT NULL
-			if (vertices != null && indices != null && textureCoords != null) {
+				// CONVERT INTO ARRAY
+				float[] vertices = currentSpriteData.getVertices();
+				short[] indices = currentSpriteData.getIndices();
+				float[] textureCoords = currentSpriteData.getTextureCoords();
 
-				// CREATE BUFFERS - these are just containers for sending the
-				// draw information we have already collected to OpenGL
+				// ONLY DRAW IF ALL NOT NULL
+				if (vertices != null && indices != null
+						&& textureCoords != null) {
 
-				// Vertex buffer (position information of every draw command)
-				ByteBuffer vbb = ByteBuffer.allocateDirect(vertices.length * 4);
-				vbb.order(ByteOrder.nativeOrder());
-				FloatBuffer vertexBuffer = vbb.asFloatBuffer();
-				vertexBuffer.put(vertices);
-				vertexBuffer.position(0);
+					// CREATE BUFFERS - these are just containers for sending
+					// the
+					// draw information we have already collected to OpenGL
 
-				// Index buffer (which vertices go together to make the
-				// elements)
-				ByteBuffer ibb = ByteBuffer.allocateDirect(indices.length * 2);
-				ibb.order(ByteOrder.nativeOrder());
-				ShortBuffer indexBuffer = ibb.asShortBuffer();
-				indexBuffer.put(indices);
-				indexBuffer.position(0);
+					// Vertex buffer (position information of every draw
+					// command)
+					ByteBuffer vbb = ByteBuffer
+							.allocateDirect(vertices.length * 4);
+					vbb.order(ByteOrder.nativeOrder());
+					FloatBuffer vertexBuffer = vbb.asFloatBuffer();
+					vertexBuffer.put(vertices);
+					vertexBuffer.position(0);
 
-				// How to paste the texture over each element so that the right
-				// image is shown
-				ByteBuffer tbb = ByteBuffer
-						.allocateDirect(textureCoords.length * 4);
-				tbb.order(ByteOrder.nativeOrder());
-				FloatBuffer textureBuffer = tbb.asFloatBuffer();
-				textureBuffer.put(textureCoords);
-				textureBuffer.position(0);
+					// Index buffer (which vertices go together to make the
+					// elements)
+					ByteBuffer ibb = ByteBuffer
+							.allocateDirect(indices.length * 2);
+					ibb.order(ByteOrder.nativeOrder());
+					ShortBuffer indexBuffer = ibb.asShortBuffer();
+					indexBuffer.put(indices);
+					indexBuffer.position(0);
 
-				// DRAW COMMAND
-				// Tell OpenGL where our texture is located.
-				gl.glBindTexture(GL10.GL_TEXTURE_2D, textureIds[i]);
-				// Telling OpenGL where our textureCoords are.
-				gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, textureBuffer);
-				// Specifies the location and data format of the array of vertex
-				// coordinates to use when rendering.
-				gl.glVertexPointer(3, GL10.GL_FLOAT, 0, vertexBuffer);
-				// Draw elements command using indices so it knows which
-				// vertices go together to form each element
-				gl.glDrawElements(GL10.GL_TRIANGLES, indices.length,
-						GL10.GL_UNSIGNED_SHORT, indexBuffer);
+					// How to paste the texture over each element so that the
+					// right
+					// image is shown
+					ByteBuffer tbb = ByteBuffer
+							.allocateDirect(textureCoords.length * 4);
+					tbb.order(ByteOrder.nativeOrder());
+					FloatBuffer textureBuffer = tbb.asFloatBuffer();
+					textureBuffer.put(textureCoords);
+					textureBuffer.position(0);
+
+					// CONVERT RGBA TO SEPERATE VALUES
+					int color = currentSpriteData.getARGB();
+					float r = (float) Color.red(color) / 255;
+					float g = (float) Color.green(color) / 255;
+					float b = (float) Color.blue(color) / 255;
+					float a = (float) Color.alpha(color) / 255;
+
+					// DRAW COMMAND
+					gl.glColor4f(r, g, b, a);
+					// Tell OpenGL where our texture is located.
+					gl.glBindTexture(GL10.GL_TEXTURE_2D,
+							currentTexture.getTextureId());
+					// Telling OpenGL where our textureCoords are.
+					gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, textureBuffer);
+					// Specifies the location and data format of the array of
+					// vertex
+					// coordinates to use when rendering.
+					gl.glVertexPointer(3, GL10.GL_FLOAT, 0, vertexBuffer);
+					// Draw elements command using indices so it knows which
+					// vertices go together to form each element
+					gl.glDrawElements(GL10.GL_TRIANGLES, indices.length,
+							GL10.GL_UNSIGNED_SHORT, indexBuffer);
+
+					// Clear spriteData
+					currentSpriteData.clear();
+				}
 			}
-		}
-		// Clear spriteData
-		for (int i = 0; i < spriteData.size(); i++) {
-			spriteData.get(i).clear();
 		}
 	}
 
-	private void addTexture(GL10 gl, Bitmap texture, int textureId) {
+	private void addTexture(GL10 gl, Resources resources, Texture texture,
+			int textureId) {
+		// Get bitmap
+		Bitmap bitmap = texture.getBitmap(resources);
+
 		// Working with textureId
 		gl.glBindTexture(GL10.GL_TEXTURE_2D, textureId);
 
@@ -212,10 +314,10 @@ public class SpriteBatcher implements Renderer {
 				GL10.GL_CLAMP_TO_EDGE);
 
 		// Attach bitmap to current texture
-		GLUtils.texImage2D(GL10.GL_TEXTURE_2D, 0, texture, 0);
+		GLUtils.texImage2D(GL10.GL_TEXTURE_2D, 0, bitmap, 0);
 
 		// Add dimensional info to spritedata
-		spriteData.add(new SpriteData(texture.getWidth(), texture.getHeight()));
+		texture.setDimensions(bitmap.getWidth(), bitmap.getHeight());
 	}
 
 	public int getViewWidth() {
@@ -229,347 +331,66 @@ public class SpriteBatcher implements Renderer {
 	// ----------- ADD SPRITE METHODS --------------------
 
 	// SIMPLE
-	public void draw(GL10 gl, int bitmapId, Rect src, Rect dst) {
-		// This is a simple class for doing straight src->dst draws
-		// Look up bitmapId
-		for (int i = 0; i < bitmapIds.length; i++) {
-			if (bitmapId == bitmapIds[i]) {
-				spriteData.get(i).addSprite(src, dst);
-				return;
-			}
-		}
-		Log.w("SpriteBatcher", "Warning: bitmapId not found");
+	public void draw(GL10 gl, int resourceId, Rect src, Rect dst) {
+		// Simple src->dst draws
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.addSprite(src, dst);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
-	public void draw(GL10 gl, int bitmapId, Rect src, Rect dst, int angle) {
-		// This is a simple class for doing straight src->dst draws
-		// Look up bitmapId
-		for (int i = 0; i < bitmapIds.length; i++) {
-			if (bitmapId == bitmapIds[i]) {
-				spriteData.get(i).addSprite(src, dst, angle);
-				return;
-			}
-		}
-		Log.w("SpriteBatcher", "Warning: bitmapId not found");
+	public void draw(GL10 gl, int resourceId, Rect src, Rect dst, int angle) {
+		// src->dst draws with rotation about src centre
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.addSprite(src, dst, angle);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
 	// COMPLICATED
-	public void draw(GL10 gl, int bitmapId, Rect src, int drawX, int drawY,
-			Rect hotRect, int angle, float scale, float alpha) {
+	public void draw(GL10 gl, int resourceId, Rect src, int drawX, int drawY,
+			Rect hotRect, int angle, float scale) {
 		// Just redirects to below with equal scale in x and y
-		draw(gl, bitmapId, src, drawX, drawY, hotRect, angle, scale, scale,
-				alpha);
+		draw(gl, resourceId, src, drawX, drawY, hotRect, angle, scale, scale);
 	}
 
-	public void draw(GL10 gl, int bitmapId, Rect src, int drawX, int drawY,
-			Rect hotRect, int angle, float sizeX, float sizeY, float alpha) {
+	public void draw(GL10 gl, int resourceId, Rect src, int drawX, int drawY,
+			Rect hotRect, int angle, float sizeX, float sizeY) {
 		// This class allows rotations but needs additional input
-		// Look up bitmapId
-		for (int i = 0; i < bitmapIds.length; i++) {
-			if (bitmapId == bitmapIds[i]) {
-				spriteData.get(i).addSprite(src, drawX, drawY, hotRect, angle,
-						sizeX, sizeY, alpha);
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.addSprite(src, drawX, drawY, hotRect, angle, sizeX, sizeY);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
+	}
+
+	public void drawText(GL10 gl, int resourceId, String text, int x, int y,
+			int scale) {
+		// Pass on with default argb value
+		drawText(gl, resourceId, text, x, y, scale, Texture.DEFAULT_ARGB);
+	}
+
+	public void drawText(GL10 gl, int resourceId, String text, int x, int y,
+			int scale, int argb) {
+		// Draw text. x and y are top left corner of text line
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			// Try casting to a FontTexture
+			FontTexture fontTexture = null;
+			try {
+				fontTexture = (FontTexture) texture;
+			} catch (ClassCastException e) {
+				Log.e(TAG,
+						"Error: Tried to drawText() with non-font resourceId!",
+						e);
 				return;
 			}
-		}
-		Log.w("SpriteBatcher", "Warning: bitmapId not found");
+			// Draw text
+			fontTexture.drawText(gl, text, x, y, scale, argb);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
-	// DIRECT
-	public void addVertices(int bitmapId, float[] f) {
-		// Look up bitmapId
-		for (int i = 0; i < bitmapIds.length; i++) {
-			if (bitmapId == bitmapIds[i]) {
-				spriteData.get(i).addVertices(f);
-				return;
-			}
-		}
-	}
-
-	public void addIndices(int bitmapId, short[] s) {
-		// Look up bitmapId
-		for (int i = 0; i < bitmapIds.length; i++) {
-			if (bitmapId == bitmapIds[i]) {
-				spriteData.get(i).addIndices(s);
-				return;
-			}
-		}
-	}
-
-	public void addTextureCoords(int bitmapId, float[] f) {
-		// Look up bitmapId
-		for (int i = 0; i < bitmapIds.length; i++) {
-			if (bitmapId == bitmapIds[i]) {
-				spriteData.get(i).addTextureCoords(f);
-				return;
-			}
-		}
-	}
-
-	private class SpriteData {
-		// This is a simple a container class to avoid unnecessary code in
-		// SpriteBatcher. It holds a whole set of information for a single
-		// GLDRAWELEMENTS call:
-		private ArrayList<Float> vertices; // Positions of vertices
-		private ArrayList<Short> indices; // Which verts go together to form
-		// Ele's
-		private ArrayList<Float> textureCoords; // Texture map coordinates
-
-		private int textureWidth;
-		private int textureHeight;
-
-		public SpriteData(int width, int height) {
-			vertices = new ArrayList<Float>();
-			indices = new ArrayList<Short>();
-			textureCoords = new ArrayList<Float>();
-			textureWidth = width;
-			textureHeight = height;
-		}
-
-		// Add sprite methods
-		// DIRECT
-		public void addVertices(float[] f) {
-			for (int i = 0; i < f.length; i++) {
-				vertices.add(f[i]);
-			}
-		}
-
-		public void addIndices(short[] s) {
-			for (int i = 0; i < s.length; i++) {
-				indices.add(s[i]);
-			}
-		}
-
-		public void addTextureCoords(float[] f) {
-			for (int i = 0; i < f.length; i++) {
-				textureCoords.add(f[i]);
-			}
-		}
-
-		// SIMPLE
-		public void addSprite(Rect src, Rect dst) {
-			// This is a simple class for doing straight src->dst draws
-
-			// VERTICES
-			vertices.add((float) dst.left);
-			vertices.add((float) dst.top);
-			vertices.add(0f);
-			vertices.add((float) dst.left);
-			vertices.add((float) dst.bottom);
-			vertices.add(0f);
-			vertices.add((float) dst.right);
-			vertices.add((float) dst.bottom);
-			vertices.add(0f);
-			vertices.add((float) dst.right);
-			vertices.add((float) dst.top);
-			vertices.add(0f);
-
-			// INDICES - increment from last value
-			short lastValue;
-			if (!indices.isEmpty()) {
-				// If not empty, find last value
-				lastValue = indices.get(indices.size() - 1);
-			} else
-				lastValue = -1;
-			indices.add((short) (lastValue + 1));
-			indices.add((short) (lastValue + 2));
-			indices.add((short) (lastValue + 3));
-			indices.add((short) (lastValue + 1));
-			indices.add((short) (lastValue + 3));
-			indices.add((short) (lastValue + 4));
-
-			// TEXTURE COORDS
-			float[] srcX = { src.left, src.left, src.right, src.right };
-			float[] srcY = { src.top, src.bottom, src.bottom, src.top };
-			for (int i = 0; i < 4; i++) {
-				textureCoords.add((float) (srcX[i] / textureWidth));
-				textureCoords.add((float) (srcY[i] / textureHeight));
-			}
-		}
-
-		public void addSprite(Rect src, Rect dst, int angle) {
-			// This is a simple class for doing straight src->dst draws
-			// It automatically rotates the images by angle about its centre
-
-			// VERTICES
-			// Trig
-			double cos = Math.cos((double) angle / 180 * Math.PI);
-			double sin = Math.sin((double) angle / 180 * Math.PI);
-
-			// Width and height
-			float halfWidth = (dst.right - dst.left) / 2;
-			float halfHeight = (dst.top - dst.bottom) / 2;
-
-			// Coordinates before rotation
-			float[] hotX = { -halfWidth, -halfWidth, halfWidth, halfWidth };
-			float[] hotY = { halfHeight, -halfHeight, -halfHeight, halfHeight };
-			for (int i = 0; i < 4; i++) {
-				// Coordinates after rotation
-				float transformedX = (float) (cos * hotX[i] - sin * hotY[i]);
-				float transformedY = (float) (sin * hotX[i] + cos * hotY[i]);
-				// Pan by draw coordinates
-				transformedX += dst.left + halfWidth;
-				transformedY += dst.bottom + halfHeight;
-				// Add to vertices array
-				vertices.add(transformedX);
-				vertices.add(transformedY);
-				vertices.add(0f);
-			}
-
-			// INDICES - increment from last value
-			short lastValue;
-			if (!indices.isEmpty()) {
-				// If not empty, find last value
-				lastValue = indices.get(indices.size() - 1);
-			} else
-				lastValue = -1;
-			indices.add((short) (lastValue + 1));
-			indices.add((short) (lastValue + 2));
-			indices.add((short) (lastValue + 3));
-			indices.add((short) (lastValue + 1));
-			indices.add((short) (lastValue + 3));
-			indices.add((short) (lastValue + 4));
-
-			// TEXTURE COORDS
-			float[] srcX = { src.left, src.left, src.right, src.right };
-			float[] srcY = { src.top, src.bottom, src.bottom, src.top };
-			for (int i = 0; i < 4; i++) {
-				textureCoords.add((float) (srcX[i] / textureWidth));
-				textureCoords.add((float) (srcY[i] / textureHeight));
-			}
-		}
-
-		// COMPLICATED
-		public void addSprite(Rect src, int drawX, int drawY, Rect hotRect,
-				int angle, float sizeX, float sizeY, float alpha) {
-			// This class allows rotations but needs additional input
-			// hotRect defines the corner coordinates from drawX and drawY
-			// drawX and drawY is the draw point and centre of rotation
-
-			// VERTICES
-			// Trig
-			double cos = Math.cos((double) angle / 180 * Math.PI);
-			double sin = Math.sin((double) angle / 180 * Math.PI);
-
-			// Coordinates before rotation
-			float[] hotX = { hotRect.left, hotRect.left, hotRect.right,
-					hotRect.right };
-			float[] hotY = { hotRect.top, hotRect.bottom, hotRect.bottom,
-					hotRect.top };
-			for (int i = 0; i < 4; i++) {
-				// Apply scale before rotation
-				float x = hotX[i] * sizeX;
-				float y = hotY[i] * sizeY;
-				// Coordinates after rotation
-				float transformedX = (float) (cos * x - sin * y);
-				float transformedY = (float) (sin * x + cos * y);
-				// Pan by draw coordinates
-				transformedX += drawX;
-				transformedY += drawY;
-				// Add to vertices array
-				vertices.add(transformedX);
-				vertices.add(transformedY);
-				vertices.add(0f);
-			}
-
-			// INDICES - increment from last value
-			short lastValue;
-			if (!indices.isEmpty()) {
-				// If not empty, find last value
-				lastValue = indices.get(indices.size() - 1);
-			} else
-				lastValue = -1;
-			indices.add((short) (lastValue + 1));
-			indices.add((short) (lastValue + 2));
-			indices.add((short) (lastValue + 3));
-			indices.add((short) (lastValue + 1));
-			indices.add((short) (lastValue + 3));
-			indices.add((short) (lastValue + 4));
-
-			// TEXTURE COORDS
-			float[] srcX = { src.left + 0.5f, src.left + 0.5f,
-					src.right - 0.5f, src.right - 0.5f };
-			float[] srcY = { src.top + 0.5f, src.bottom - 0.5f,
-					src.bottom - 0.5f, src.top + 0.5f };
-			for (int i = 0; i < 4; i++) {
-				textureCoords.add((float) (srcX[i] / textureWidth));
-				textureCoords.add((float) (srcY[i] / textureHeight));
-			}
-			// Log.d("SpriteBatcher", "Left = " + src.left);
-			// Log.d("SpriteBatcher", "Top = " + src.top);
-			// Log.d("SpriteBatcher", "Right = " + src.right);
-			// Log.d("SpriteBatcher", "Bottom = " + src.bottom);
-			// Log.d("SpriteBatcher", "LEFT U = "
-			// + (float) ((float) src.left + 0.5 / textureWidth));
-			// Log.d("SpriteBatcher", "TOP V = "
-			// + (float) ((float) src.top + 0.5 / textureHeight));
-			// textureCoords
-			// .add((float) (((float) src.left + 0.5) / textureWidth));
-			// textureCoords
-			// .add((float) (((float) src.top + 0.5) / textureHeight));
-			// textureCoords
-			// .add((float) (((float) src.left + 0.5) / textureWidth));
-			// textureCoords
-			// .add((float) (((float) src.bottom - 0.5) / textureHeight));
-			// textureCoords
-			// .add((float) (((float) src.right - 0.5) / textureWidth));
-			// textureCoords
-			// .add((float) (((float) src.bottom - 0.5) / textureHeight));
-			// textureCoords
-			// .add((float) (((float) src.right - 0.5) / textureWidth));
-			// textureCoords
-			// .add((float) (((float) src.top + 0.5) / textureHeight));
-		}
-
-		public void clear() {
-			vertices.clear();
-			indices.clear();
-			textureCoords.clear();
-		}
-
-		// GETTER/SETTER
-		public float[] getVertices() {
-			// Convert to float[] before returning
-			return convertToPrimitive(vertices.toArray(new Float[vertices
-					.size()]));
-		}
-
-		public short[] getIndices() {
-			// Convert to short[] before returning
-			return convertToPrimitive(indices
-					.toArray(new Short[indices.size()]));
-		}
-
-		public float[] getTextureCoords() {
-			// Convert to float[] before returning
-			return convertToPrimitive(textureCoords
-					.toArray(new Float[textureCoords.size()]));
-		}
-
-		private float[] convertToPrimitive(Float[] objectArray) {
-			if (objectArray == null) {
-				return null;
-			} else if (objectArray.length == 0) {
-				return null;
-			}
-			final float[] primitiveArray = new float[objectArray.length];
-			for (int i = 0; i < objectArray.length; i++) {
-				primitiveArray[i] = objectArray[i].floatValue();
-			}
-			return primitiveArray;
-		}
-
-		private short[] convertToPrimitive(Short[] objectArray) {
-			if (objectArray == null) {
-				return null;
-			} else if (objectArray.length == 0) {
-				return null;
-			}
-			final short[] primitiveArray = new short[objectArray.length];
-			for (int i = 0; i < objectArray.length; i++) {
-				primitiveArray[i] = objectArray[i].shortValue();
-			}
-			return primitiveArray;
-		}
-	}
 }
