@@ -357,8 +357,8 @@ public class SpriteBatcher implements Renderer {
 	 * 
 	 * @param params
 	 */
-	public void setFontParams(FontParams params) {
-		Texture texture = texturesByResourceId.get(params.getId());
+	public void setFontParams(int resourceId, FontParams params) {
+		Texture texture = texturesByResourceId.get(resourceId);
 		if (texture != null && texture.getClass() == FontTexture.class) {
 			FontTexture fontTexture = (FontTexture) texture;
 			fontTexture.setParams(params);

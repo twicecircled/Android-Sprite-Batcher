@@ -2,7 +2,6 @@ package com.twicecircled.spritebatcher;
 
 public class FontParams {
 	// Hold the parameters of a particular font.
-	private int resourceId;
 	private int size = 24; // default
 	private int argb = 0xffffffff; // default = white
 	private int charStart = 32; // default = hyphen
@@ -18,8 +17,7 @@ public class FontParams {
 	 * 
 	 * @param resourceId
 	 */
-	public FontParams(int resourceId) {
-		this.resourceId = resourceId;
+	public FontParams() {
 	}
 
 	/**
@@ -119,11 +117,7 @@ public class FontParams {
 		this.padY = padY;
 		return this;
 	}
-
-	protected int getId() {
-		return resourceId;
-	}
-
+	
 	protected int getSize() {
 		return size;
 	}
