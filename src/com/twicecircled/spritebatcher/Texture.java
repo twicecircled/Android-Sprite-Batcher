@@ -20,44 +20,62 @@ public abstract class Texture {
 
 	// SHARED METHODS:
 	// Return SpriteData class
-	public SparseArray<SpriteData> getSpriteData() {
+	protected SparseArray<SpriteData> getSpriteData() {
 		return spriteDatas;
 	}
 
 	// Return unique texture id associated with this texture
-	public int getTextureId() {
+	protected int getTextureId() {
 		return textureId;
 	}
 
 	// Set unique texture id associated with this texture
-	public void setTextureId(int id) {
+	protected void setTextureId(int id) {
 		textureId = id;
 	}
 
 	// Passes dimensional data over to spritedata
-	public void setDimensions(int width, int height) {
+	protected void setDimensions(int width, int height) {
 		this.width = width;
 		this.height = height;
 	}
 
-	public void addSprite(Rect src, Rect dst) {
+	protected void addSprite(Rect src, Rect dst) {
 		// No rgba value defined so use default
 		getDefaultSpriteData().addSprite(src, dst);
 	}
 
-	public void addSprite(Rect src, Rect dst, int angle) {
+	protected void addSprite(Rect src, Rect dst, int angle) {
 		getDefaultSpriteData().addSprite(src, dst, angle);
 	}
 
-	public void addSprite(Rect src, int drawX, int drawY, Rect hotRect,
+	protected void addSprite(Rect src, Rect dst, int angle, int argb) {
+		getARGBSpriteData(argb).addSprite(src, dst, angle);
+	}
+
+	protected void addSprite(Rect src, int drawX, int drawY, Rect hotRect,
 			int angle, float sizeX, float sizeY) {
 		getDefaultSpriteData().addSprite(src, drawX, drawY, hotRect, angle,
 				sizeX, sizeY);
 	}
 
-	protected SpriteData getDefaultSpriteData(){
+	protected void addSprite(Rect src, int drawX, int drawY, Rect hotRect,
+			int angle, float sizeX, float sizeY, int argb) {
+		getARGBSpriteData(argb).addSprite(src, drawX, drawY, hotRect, angle,
+				sizeX, sizeY);
+	}
+
+	protected void drawLine(Rect src, int x1, int y1, int x2, int y2, int width) {
+		getDefaultSpriteData().drawLine(src, x1, y1, x2, y2, width);
+	}
+
+	protected void drawTile(Rect dst, int offsetX, int offsetY, float scale) {
+		getDefaultSpriteData().drawTile(dst, offsetX, offsetY, scale);
+	}
+
+	protected SpriteData getDefaultSpriteData() {
 		SpriteData spriteData = spriteDatas.get(DEFAULT_ARGB);
-		if (spriteData==null){
+		if (spriteData == null) {
 			// Create it
 			spriteData = new SpriteData(DEFAULT_ARGB);
 			spriteDatas.put(DEFAULT_ARGB, spriteData);
@@ -65,10 +83,10 @@ public abstract class Texture {
 		}
 		return spriteData;
 	}
-	
-	protected SpriteData getARGBSpriteData(int argb){
+
+	protected SpriteData getARGBSpriteData(int argb) {
 		SpriteData spriteData = spriteDatas.get(argb);
-		if (spriteData==null){
+		if (spriteData == null) {
 			// Create it
 			spriteData = new SpriteData(argb);
 			spriteDatas.put(argb, spriteData);
@@ -83,6 +101,6 @@ public abstract class Texture {
 
 	// Get bitmap object. Note this must decoded on the fly and recycled so that
 	// it is not ever held in memory
-	public abstract Bitmap getBitmap(Resources resources);
+	protected abstract Bitmap getBitmap(Resources resources);
 
 }

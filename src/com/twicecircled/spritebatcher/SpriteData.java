@@ -2,6 +2,7 @@ package com.twicecircled.spritebatcher;
 
 import java.util.ArrayList;
 import android.graphics.Rect;
+import android.util.Log;
 
 public class SpriteData {
 	// A SpriteData contains all of the information needs to make a single
@@ -17,44 +18,44 @@ public class SpriteData {
 
 	private int argb;
 
-	public SpriteData(int rgba) {
+	protected SpriteData(int rgba) {
 		vertices = new ArrayList<Float>();
 		indices = new ArrayList<Short>();
 		textureCoords = new ArrayList<Float>();
 		this.argb = rgba;
 	}
 
-	public void setDimensions(int width, int height) {
+	protected void setDimensions(int width, int height) {
 		textureWidth = width;
 		textureHeight = height;
 	}
 
-	public int getARGB() {
+	protected int getARGB() {
 		return argb;
 	}
 
 	// Add sprite methods
 	// DIRECT
-	public void addVertices(float[] f) {
+	protected void addVertices(float[] f) {
 		for (int i = 0; i < f.length; i++) {
 			vertices.add(f[i]);
 		}
 	}
 
-	public void addIndices(short[] s) {
+	protected void addIndices(short[] s) {
 		for (int i = 0; i < s.length; i++) {
 			indices.add(s[i]);
 		}
 	}
 
-	public void addTextureCoords(float[] f) {
+	protected void addTextureCoords(float[] f) {
 		for (int i = 0; i < f.length; i++) {
 			textureCoords.add(f[i]);
 		}
 	}
 
 	// SIMPLE
-	public void addSprite(Rect src, Rect dst) {
+	protected void addSprite(Rect src, Rect dst) {
 		// This is a simple class for doing straight src->dst draws
 
 		// VERTICES
@@ -94,7 +95,7 @@ public class SpriteData {
 		}
 	}
 
-	public void addSprite(Rect src, Rect dst, int angle) {
+	protected void addSprite(Rect src, Rect dst, int angle) {
 		// This is a simple class for doing straight src->dst draws
 		// It automatically rotates the images by angle about its centre
 
@@ -147,7 +148,7 @@ public class SpriteData {
 	}
 
 	// COMPLICATED
-	public void addSprite(Rect src, int drawX, int drawY, Rect hotRect,
+	protected void addSprite(Rect src, int drawX, int drawY, Rect hotRect,
 			int angle, float sizeX, float sizeY) {
 		// This class allows rotations but needs additional input
 		// hotRect defines the corner coordinates from drawX and drawY
@@ -205,24 +206,125 @@ public class SpriteData {
 
 	}
 
-	public void clear() {
+	protected void drawLine(Rect src, int x1, int y1, int x2, int y2, int width) {
+		// Get angle between p1 and p2
+		double angle = Math.atan2(y2 - y1, x2 - x1);
+		int sinAngleOffset = (int) (Math.sin(angle) * width / 2);
+		int cosAngleOffset = (int) (Math.cos(angle) * width / 2);
+
+		// VERTICES
+		vertices.add((float) (x1 + sinAngleOffset));
+		vertices.add((float) (y1 - cosAngleOffset));
+		vertices.add(0f);
+		vertices.add((float) (x1 - sinAngleOffset));
+		vertices.add((float) (y1 + cosAngleOffset));
+		vertices.add(0f);
+		vertices.add((float) (x2 - sinAngleOffset));
+		vertices.add((float) (y2 + cosAngleOffset));
+		vertices.add(0f);
+		vertices.add((float) (x2 + sinAngleOffset));
+		vertices.add((float) (y2 - cosAngleOffset));
+		vertices.add(0f);
+
+		// INDICES - increment from last value
+		short lastValue;
+		if (!indices.isEmpty()) {
+			// If not empty, find last value
+			lastValue = indices.get(indices.size() - 1);
+		} else
+			lastValue = -1;
+		indices.add((short) (lastValue + 1));
+		indices.add((short) (lastValue + 2));
+		indices.add((short) (lastValue + 3));
+		indices.add((short) (lastValue + 1));
+		indices.add((short) (lastValue + 3));
+		indices.add((short) (lastValue + 4));
+
+		// Get length of line
+		int length = (int) Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1)
+				* (y2 - y1));
+		// Get number of times texture should 'wrap'
+		int textureLength = src.right - src.left;
+		int nWrap = length / textureLength;
+
+		// TEXTURE COORDS
+		float[] u = { 0, 0, nWrap, nWrap };
+		float[] srcY = { src.top, src.bottom, src.bottom, src.top };
+		for (int i = 0; i < 4; i++) {
+			textureCoords.add((float) (u[i]));
+			textureCoords.add((float) (srcY[i] / textureHeight));
+		}
+	}
+
+	public void drawTile(Rect dst, int offsetX, int offsetY, float scale) {
+		// VERTICES
+		vertices.add((float) dst.left);
+		vertices.add((float) dst.top);
+		vertices.add(0f);
+		vertices.add((float) dst.left);
+		vertices.add((float) dst.bottom);
+		vertices.add(0f);
+		vertices.add((float) dst.right);
+		vertices.add((float) dst.bottom);
+		vertices.add(0f);
+		vertices.add((float) dst.right);
+		vertices.add((float) dst.top);
+		vertices.add(0f);
+
+		// INDICES - increment from last value
+		short lastValue;
+		if (!indices.isEmpty()) {
+			// If not empty, find last value
+			lastValue = indices.get(indices.size() - 1);
+		} else
+			lastValue = -1;
+		indices.add((short) (lastValue + 1));
+		indices.add((short) (lastValue + 2));
+		indices.add((short) (lastValue + 3));
+		indices.add((short) (lastValue + 1));
+		indices.add((short) (lastValue + 3));
+		indices.add((short) (lastValue + 4));
+
+		// Get number of times texture should 'wrap'
+		int drawWidth = dst.right - dst.left;
+		int drawHeight = dst.bottom - dst.top;
+		float xWrap = (float) drawWidth / textureWidth / scale;
+		float yWrap = (float) drawHeight / textureHeight / scale;
+
+		// Offsets
+		float offsetU = (float) offsetX / textureWidth;
+		float offsetV = (float) offsetY / textureHeight;
+
+		Log.d(SpriteBatcher.TAG, "offsetU = " + offsetU);
+
+		// TEXTURE COORDS
+		float[] u = { offsetU, offsetU, xWrap + offsetU, xWrap + offsetU };
+		float[] v = { offsetV, yWrap + offsetV, yWrap + offsetV, offsetV };
+		for (int i = 0; i < 4; i++) {
+			textureCoords.add((float) (u[i]));
+			textureCoords.add((float) (v[i]));
+		}
+
+	}
+
+	protected void clear() {
 		vertices.clear();
 		indices.clear();
 		textureCoords.clear();
 	}
 
 	// GETTER/SETTER
-	public float[] getVertices() {
+	protected float[] getVertices() {
 		// Convert to float[] before returning
 		return convertToPrimitive(vertices.toArray(new Float[vertices.size()]));
 	}
 
-	public short[] getIndices() {
+	protected short[] getIndices() {
 		// Convert to short[] before returning
 		return convertToPrimitive(indices.toArray(new Short[indices.size()]));
 	}
 
-	public float[] getTextureCoords() {
+	protected float[] getTextureCoords() {
 		// Convert to float[] before returning
 		return convertToPrimitive(textureCoords.toArray(new Float[textureCoords
 				.size()]));

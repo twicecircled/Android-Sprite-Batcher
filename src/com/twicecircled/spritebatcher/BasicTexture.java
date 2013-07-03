@@ -12,7 +12,7 @@ public class BasicTexture extends Texture {
 	}
 
 	@Override
-	public Bitmap getBitmap(Resources resources) {
+	protected Bitmap getBitmap(Resources resources) {
 		return BitmapFactory.decodeResource(resources, bitmapId);
 	}
 }

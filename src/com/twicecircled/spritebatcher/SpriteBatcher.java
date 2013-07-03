@@ -43,6 +43,8 @@ public class SpriteBatcher implements Renderer {
 	private int width;
 	private int height;
 
+	private int count;
+
 	// A Texture object holds all the information to send a batch of sprites to
 	SparseArray<Texture> texturesByResourceId;
 	// ArrayList for consistent draw order
@@ -137,10 +139,12 @@ public class SpriteBatcher implements Renderer {
 		gl.glRotatef(-180, 1, 0, 0);
 
 		// START DRAWING
+		count = 0;
 		drawer.onDrawFrame(gl, this);
 
 		// Finally, send off all the draw commands in batches
 		batchDraw(gl);
+		// Log.i(TAG, "Batch count = " + count);
 	}
 
 	@Override
@@ -166,7 +170,7 @@ public class SpriteBatcher implements Renderer {
 	public void onSurfaceCreated(GL10 gl, EGLConfig config) {
 		// SETTINGS
 		// Set the background color to black ( rgba ).
-		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 		// DRAWING SETUP
 		// NOTES: As we are always drawing with textures and viewing our
@@ -294,6 +298,7 @@ public class SpriteBatcher implements Renderer {
 					// vertices go together to form each element
 					gl.glDrawElements(GL10.GL_TRIANGLES, indices.length,
 							GL10.GL_UNSIGNED_SHORT, indexBuffer);
+					count++;
 
 					// Clear spriteData
 					currentSpriteData.clear();
@@ -319,9 +324,9 @@ public class SpriteBatcher implements Renderer {
 				GL10.GL_LINEAR);
 		// Clamp to edge behaviour at edge of texture (repeats last pixel)
 		gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S,
-				GL10.GL_CLAMP_TO_EDGE);
+				GL10.GL_REPEAT);
 		gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T,
-				GL10.GL_CLAMP_TO_EDGE);
+				GL10.GL_REPEAT);
 
 		// Attach bitmap to current texture
 		GLUtils.texImage2D(GL10.GL_TEXTURE_2D, 0, bitmap, 0);
@@ -371,7 +376,7 @@ public class SpriteBatcher implements Renderer {
 	// ----------- DRAW METHODS --------------------
 
 	// SIMPLE
-	public void draw(GL10 gl, int resourceId, Rect src, Rect dst) {
+	public void draw(int resourceId, Rect src, Rect dst) {
 		// Simple src->dst draws
 		Texture texture = texturesByResourceId.get(resourceId);
 		if (texture != null) {
@@ -380,7 +385,7 @@ public class SpriteBatcher implements Renderer {
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
-	public void draw(GL10 gl, int resourceId, Rect src, Rect dst, int angle) {
+	public void draw(int resourceId, Rect src, Rect dst, int angle) {
 		// src->dst draws with rotation about src centre
 		Texture texture = texturesByResourceId.get(resourceId);
 		if (texture != null) {
@@ -389,19 +394,39 @@ public class SpriteBatcher implements Renderer {
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
-	// COMPLICATED
-	public void draw(GL10 gl, int resourceId, Rect src, int drawX, int drawY,
-			Rect hotRect, int angle, float scale) {
-		// Just redirects to below with equal scale in x and y
-		draw(gl, resourceId, src, drawX, drawY, hotRect, angle, scale, scale);
+	public void draw(int resourceId, Rect src, Rect dst, int angle, int argb) {
+		// src->dst draws with rotation about src centre
+		// With colour alteration
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.addSprite(src, dst, angle, argb);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
-	public void draw(GL10 gl, int resourceId, Rect src, int drawX, int drawY,
+	// COMPLICATED
+	public void draw(int resourceId, Rect src, int drawX, int drawY,
+			Rect hotRect, int angle, float scale) {
+		// Just redirects to below with equal scale in x and y
+		draw(resourceId, src, drawX, drawY, hotRect, angle, scale, scale);
+	}
+
+	public void draw(int resourceId, Rect src, int drawX, int drawY,
 			Rect hotRect, int angle, float sizeX, float sizeY) {
-		// This class allows rotations but needs additional input
+		// This method allows rotations but needs additional input
 		Texture texture = texturesByResourceId.get(resourceId);
 		if (texture != null) {
 			texture.addSprite(src, drawX, drawY, hotRect, angle, sizeX, sizeY);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
+	}
+	
+	public void draw(int resourceId, Rect src, int drawX, int drawY,
+			Rect hotRect, int angle, float sizeX, float sizeY, int argb) {
+		// This method allows rotations but needs additional input
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.addSprite(src, drawX, drawY, hotRect, angle, sizeX, sizeY,argb);
 		} else
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
@@ -424,10 +449,9 @@ public class SpriteBatcher implements Renderer {
 	 *            leave as 1 and change the native size when creating each
 	 *            FontData object.
 	 */
-	public void drawText(GL10 gl, int resourceId, String text, int x, int y,
-			int scale) {
+	public void drawText(int resourceId, String text, int x, int y, float scale) {
 		// Pass on with default argb value
-		drawText(gl, resourceId, text, x, y, scale, Texture.DEFAULT_ARGB);
+		drawText(resourceId, text, x, y, scale, Texture.DEFAULT_ARGB);
 	}
 
 	/**
@@ -452,8 +476,8 @@ public class SpriteBatcher implements Renderer {
 	 *            blue text. You can use Android's Color to generate these on
 	 *            your behalf.
 	 */
-	public void drawText(GL10 gl, int resourceId, String text, int x, int y,
-			int scale, int argb) {
+	public void drawText(int resourceId, String text, int x, int y,
+			float scale, int argb) {
 		// Draw text. x and y are top left corner of text line
 		Texture texture = texturesByResourceId.get(resourceId);
 		if (texture != null) {
@@ -468,9 +492,48 @@ public class SpriteBatcher implements Renderer {
 				return;
 			}
 			// Draw text
-			fontTexture.drawText(gl, text, x, y, scale, argb);
+			fontTexture.drawText(text, x, y, scale, argb);
 		} else
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
 
+	/**
+	 * ALPHA - Use at your own risk
+	 * 
+	 * @param resourceId
+	 * @param src
+	 * @param x1
+	 * @param y1
+	 * @param x2
+	 * @param y2
+	 * @param width
+	 */
+	public void drawLine(int resourceId, Rect src, int x1, int y1, int x2,
+			int y2, int width) {
+		// Draw a line from x to y. The resource texture will be repeated
+		// longitudinally along the line.
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.drawLine(src, x1, y1, x2, y2, width);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
+	}
+
+	/**
+	 * ALPHA - Use at your own risk
+	 * 
+	 * @param resourceId
+	 * @param src
+	 * @param offsetX
+	 * @param offsetY
+	 */
+	public void drawTile(int resourceId, Rect dst, int offsetX, int offsetY,
+			float scale) {
+		// Tile a texture across an entire
+		Texture texture = texturesByResourceId.get(resourceId);
+		if (texture != null) {
+			texture.drawTile(dst, offsetX, offsetY, scale);
+		} else
+			Log.w("SpriteBatcher", "Warning: resourceId not found");
+	}
 }
