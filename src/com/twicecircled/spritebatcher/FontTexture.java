@@ -1,12 +1,12 @@
 package com.twicecircled.spritebatcher;
 
-import javax.microedition.khronos.opengles.GL10;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 
@@ -34,7 +34,7 @@ public class FontTexture extends Texture {
 	private int charEnd = 126;
 	private int charUnknown = 32; // Must be between start and end
 	private int padX = 2;
-	private int padY = 2;
+	private int padY = 4;
 
 	public FontTexture(Typeface tf) {
 		this.tf = tf;
@@ -50,8 +50,7 @@ public class FontTexture extends Texture {
 		this.padY = params.getPadY();
 	}
 
-	public void drawText(GL10 gl, String text, int x, int y, float scale,
-			int argb) {
+	protected void drawText(String text, int x, int y, float scale, int argb) {
 		// Draw text centred at x,y
 		// Get width of text
 		int textWidth = 0;
@@ -60,13 +59,16 @@ public class FontTexture extends Texture {
 			charWidth = charWidths.get((int) text.charAt(i));
 			textWidth += charWidth;
 		}
-		// Adjust to centre text about x,y
-		x -= textWidth / 2;
-		y -= fontHeight;
 
-		// No cycle through and draw text
+		// Scale text
 		int scaledCellWidth = (int) (scale * cellWidth);
 		int scaledCellHeight = (int) (scale * cellHeight);
+
+		// Adjust to centre text about x,y
+		x -= padX + textWidth / 2;
+		y -= scaledCellHeight / 2;
+
+		// Now cycle through and draw text
 		Rect src;
 		Rect dst = new Rect();
 		int charNumber;
@@ -93,7 +95,7 @@ public class FontTexture extends Texture {
 	}
 
 	@Override
-	public Bitmap getBitmap(Resources resources) {
+	protected Bitmap getBitmap(Resources resources) {
 		// We use the font to create a sprite atlas containing every letter,
 		// then we return the sprite atlas bitmap to be used as the texture.
 
@@ -136,7 +138,7 @@ public class FontTexture extends Texture {
 
 		// Find the maximum size, validate, and setup cell sizes
 		cellWidth = (int) charWidthMax + (2 * padX);
-		cellHeight = (int) charHeight + (2 * padY);
+		cellHeight = (int) charHeight + padY;
 		// Save whichever is bigger
 		int maxSize = cellWidth > cellHeight ? cellWidth : cellHeight;
 
@@ -173,14 +175,14 @@ public class FontTexture extends Texture {
 		// Also store a source rectangle for each char
 		characterRects = new SparseArray<Rect>();
 		int x = 0;
-		int y = cellHeight;// (cellHeight - 1) - fontDescent - padY;
+		int y = 0;
 		for (char c = (char) charStart; c <= (char) charEnd; c++) {
 			// Draw char
 			s[0] = c;
-			canvas.drawText(s, 0, 1, x, y, paint);
+			canvas.drawText(s, 0, 1, x+padX, y + cellHeight - padY, paint);
 			// Store source rectangle
-			characterRects.put((int) c, new Rect(x, y - cellHeight, x
-					+ cellWidth, y));
+			characterRects.put((int) c, new Rect(x, y, x + cellWidth, y
+					+ cellHeight));
 			// Increment and wrap at end of line
 			x += cellWidth;
 			if ((x + cellWidth) > textureSize) {
