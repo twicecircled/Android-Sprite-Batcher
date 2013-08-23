@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
+
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -40,18 +42,23 @@ public class SpriteBatcher implements Renderer {
 	// drawer.onDrawFrame(..) gets called by SpriteBatcher each frame
 	private Drawer drawer;
 
+	private int apkExpansionVersionMain = 1;
+	private int apkExpansionVersionPatch = 1;
+
 	private int width;
 	private int height;
 
+	private int maxFPS;
+	private long lastTime;
+
 	private int count;
+
+	private Context context;
 
 	// A Texture object holds all the information to send a batch of sprites to
 	SparseArray<Texture> texturesByResourceId;
 	// ArrayList for consistent draw order
 	ArrayList<Texture> drawOrder;
-
-	// Needed to load bitmaps into OpenGL
-	Resources resources;
 
 	// Resource types
 	private static final String DRAWABLE = "drawable";
@@ -71,17 +78,41 @@ public class SpriteBatcher implements Renderer {
 	 * @param drawer
 	 *            object implementing Drawer interface
 	 */
-	public SpriteBatcher(Resources resources, int[] resourceIds, Drawer drawer) {
+
+	public SpriteBatcher(Context context, int[] resourceIds, Drawer drawer) {
+		setUp(context, resourceIds, drawer);
+	}
+
+	/**
+	 * Constructor if using expansion apks. Need to provide expansion apk
+	 * version.
+	 * 
+	 * @param resources
+	 * @param resourceIds
+	 *            valid resource ids are R.drawable.xxx for normal sprites or
+	 *            R.String.xxx where the string resource contains a path to a
+	 *            font or to a drawable in an expansion file
+	 * @param drawer
+	 *            object implementing Drawer interface
+	 */
+	public SpriteBatcher(Context context, int[] resourceIds, Drawer drawer,
+			int apkExpansionVersionMain, int apkExpansionVersionPatch) {
+		this.apkExpansionVersionMain = apkExpansionVersionMain;
+		this.apkExpansionVersionPatch = apkExpansionVersionPatch;
+		setUp(context, resourceIds, drawer);
+	}
+
+	private void setUp(Context context, int[] resourceIds, Drawer drawer) {
 		// Need a reference to resources to load textures later
-		this.resources = resources;
+		this.context = context;
 
 		// Create texture objects for each resource id
-		setUpTextureObjects(resources, resourceIds);
+		setUpTextureObjects(context, resourceIds);
 
 		this.drawer = drawer;
 	}
 
-	private void setUpTextureObjects(Resources resources, int[] resourceIds) {
+	private void setUpTextureObjects(Context context, int[] resourceIds) {
 		texturesByResourceId = new SparseArray<Texture>();
 		drawOrder = new ArrayList<Texture>();
 		// Loop through resource ids and generate texture objects
@@ -89,33 +120,43 @@ public class SpriteBatcher implements Renderer {
 		Texture texture;
 		for (int i = 0; i < resourceIds.length; i++) {
 			try {
-				if (resources.getResourceTypeName(resourceIds[i]).equals(
-						DRAWABLE)) {
+				if (context.getResources().getResourceTypeName(resourceIds[i])
+						.equals(DRAWABLE)) {
 					texture = new BasicTexture(resourceIds[i]);
 					texturesByResourceId.put(resourceIds[i], texture);
 					drawOrder.add(texture);
-				} else if (resources.getResourceTypeName(resourceIds[i])
-						.equals(STRING)) {
-					// Try to get font file from path in string
-					filePath = resources.getString(resourceIds[i]);
-					Typeface tf;
-					try {
-						tf = Typeface.createFromAsset(resources.getAssets(),
-								filePath);
-						if (tf == null) {
-							throw new Exception();
+				} else if (context.getResources()
+						.getResourceTypeName(resourceIds[i]).equals(STRING)) {
+					// Could be a font or file texture
+					filePath = context.getResources().getString(resourceIds[i]);
+					if (filePath.substring(0, 5).equals("fonts")) {
+						// Try to get font file from path in string
+						Typeface tf;
+						try {
+							tf = Typeface.createFromAsset(context
+									.getResources().getAssets(), filePath);
+							if (tf == null) {
+								throw new Exception();
+							}
+						} catch (Exception e) {
+							Log.e(TAG,
+									"Error, could not create font from asset filePath: "
+											+ filePath, e);
+							// Skip on to next resource id
+							continue;
 						}
-					} catch (Exception e) {
-						Log.e(TAG,
-								"Error, could not create font from asset filePath: "
-										+ filePath, e);
-						// Skip on to next resource id
-						continue;
+						// Store font texture
+						texture = new FontTexture(tf);
+						texturesByResourceId.put(resourceIds[i], texture);
+						drawOrder.add(texture);
+					} else {
+						// It must be the path to an expansion file
+						texture = new FileTexture(filePath,
+								apkExpansionVersionMain,
+								apkExpansionVersionPatch);
+						texturesByResourceId.put(resourceIds[i], texture);
+						drawOrder.add(texture);
 					}
-					// Store font texture
-					texture = new FontTexture(tf);
-					texturesByResourceId.put(resourceIds[i], texture);
-					drawOrder.add(texture);
 				} else {
 					Log.w(TAG,
 							"Warning: resourceIds["
@@ -131,6 +172,20 @@ public class SpriteBatcher implements Renderer {
 
 	@Override
 	public void onDrawFrame(GL10 gl) {
+		if (maxFPS != 0) {
+			long elapsed = System.currentTimeMillis() - lastTime;
+			int minElapsed = 1000 / maxFPS;
+			if (elapsed < minElapsed) {
+				try {
+					Thread.sleep(minElapsed - elapsed);
+				} catch (InterruptedException e) {
+					Log.e("SpriteBatcher",
+							"Error sleeping thread, to cap FPS.", e);
+				}
+			}
+			lastTime = System.currentTimeMillis();
+		}
+
 		// Clears the screen and depth buffer.
 		gl.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
 		// Replace the current matrix with the identity matrix
@@ -145,6 +200,10 @@ public class SpriteBatcher implements Renderer {
 		// Finally, send off all the draw commands in batches
 		batchDraw(gl);
 		// Log.i(TAG, "Batch count = " + count);
+	}
+
+	public void setMaxFPS(int maxFPS) {
+		this.maxFPS = maxFPS;
 	}
 
 	@Override
@@ -202,7 +261,7 @@ public class SpriteBatcher implements Renderer {
 			// Assign texture id
 			currentTexture.setTextureId(textureIds[i]);
 			// Load bitmap into openGL
-			addTexture(gl, resources, currentTexture, textureIds[i]);
+			addTexture(gl, context, currentTexture, textureIds[i]);
 		}
 	}
 
@@ -307,11 +366,11 @@ public class SpriteBatcher implements Renderer {
 		}
 	}
 
-	private void addTexture(GL10 gl, Resources resources, Texture texture,
+	private void addTexture(GL10 gl, Context context, Texture texture,
 			int textureId) {
 		// Get bitmap
-		Bitmap bitmap = texture.getBitmap(resources);
-
+		Bitmap bitmap = texture.getBitmap(context);
+		
 		// Working with textureId
 		gl.glBindTexture(GL10.GL_TEXTURE_2D, textureId);
 
@@ -333,6 +392,7 @@ public class SpriteBatcher implements Renderer {
 
 		// Add dimensional info to spritedata
 		texture.setDimensions(bitmap.getWidth(), bitmap.getHeight());
+		bitmap.recycle();
 	}
 
 	/**
@@ -420,13 +480,14 @@ public class SpriteBatcher implements Renderer {
 		} else
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}
-	
+
 	public void draw(int resourceId, Rect src, int drawX, int drawY,
 			Rect hotRect, int angle, float sizeX, float sizeY, int argb) {
 		// This method allows rotations but needs additional input
 		Texture texture = texturesByResourceId.get(resourceId);
 		if (texture != null) {
-			texture.addSprite(src, drawX, drawY, hotRect, angle, sizeX, sizeY,argb);
+			texture.addSprite(src, drawX, drawY, hotRect, angle, sizeX, sizeY,
+					argb);
 		} else
 			Log.w("SpriteBatcher", "Warning: resourceId not found");
 	}

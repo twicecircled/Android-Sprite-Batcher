@@ -1,11 +1,13 @@
 package com.twicecircled.spritebatcher;
 
+import java.util.ArrayList;
+
 public class FontParams {
 	// Hold the parameters of a particular font.
 	private int size = 24; // default
 	private int argb = 0xffffffff; // default = white
-	private int charStart = 32; // default = hyphen
-	private int charEnd = 126; // default = hyphen
+	private ArrayList<Integer> charStart = new ArrayList<Integer>();
+	private ArrayList<Integer> charEnd = new ArrayList<Integer>();
 	private int charUnknown = 32; // defaut = space
 	private int padX = 2; // default
 	private int padY = 2; // default
@@ -18,6 +20,8 @@ public class FontParams {
 	 * @param resourceId
 	 */
 	public FontParams() {
+		charStart.add(32); // default = hyphen
+		charEnd.add(126); // default = hyphen
 	}
 
 	/**
@@ -57,7 +61,7 @@ public class FontParams {
 	 * @return this FontParams object
 	 */
 	public FontParams charStart(int charStart) {
-		this.charStart = charStart;
+		this.charStart.add(charStart);
 		return this;
 	}
 
@@ -73,7 +77,7 @@ public class FontParams {
 	 * @return this FontParams object
 	 */
 	public FontParams charEnd(int charEnd) {
-		this.charEnd = charEnd;
+		this.charEnd.add(charEnd);
 		return this;
 	}
 
@@ -117,7 +121,7 @@ public class FontParams {
 		this.padY = padY;
 		return this;
 	}
-	
+
 	protected int getSize() {
 		return size;
 	}
@@ -126,11 +130,11 @@ public class FontParams {
 		return argb;
 	}
 
-	protected int getcharStart() {
+	protected ArrayList<Integer> getCharStart() {
 		return charStart;
 	}
 
-	protected int getCharEnd() {
+	protected ArrayList<Integer> getCharEnd() {
 		return charEnd;
 	}
 

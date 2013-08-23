@@ -1,12 +1,13 @@
 package com.twicecircled.spritebatcher;
 
-import android.content.res.Resources;
+import java.util.ArrayList;
+
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
-import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 
@@ -27,23 +28,29 @@ public class FontTexture extends Texture {
 	private int cellHeight;
 
 	// Font settings (defaults)
-	// TODO: Add way to change these:
 	private int size = 24;
 	private int colour = 0xffffffff;
-	private int charStart = 32;
-	private int charEnd = 126;
+	private ArrayList<Integer> charStart = new ArrayList<Integer>();
+	private ArrayList<Integer> charEnd = new ArrayList<Integer>();
 	private int charUnknown = 32; // Must be between start and end
 	private int padX = 2;
 	private int padY = 4;
 
+	// KNOWN CHAR SETS:
+	public static final int COMMON_JAPANESE_START = 12352;
+	public static final int COMMON_JAPANESE_END = 12543;
+
 	public FontTexture(Typeface tf) {
+		// Set default ASCII RANGE
+		charStart.add(32);
+		charEnd.add(126);
 		this.tf = tf;
 	}
 
 	protected void setParams(FontParams params) {
 		this.size = params.getSize();
 		this.colour = params.getArgb();
-		this.charStart = params.getcharStart();
+		this.charStart = params.getCharStart();
 		this.charEnd = params.getCharEnd();
 		this.charUnknown = params.getCharUnknown();
 		this.padX = params.getPadX();
@@ -95,7 +102,7 @@ public class FontTexture extends Texture {
 	}
 
 	@Override
-	protected Bitmap getBitmap(Resources resources) {
+	protected Bitmap getBitmap(Context context) {
 		// We use the font to create a sprite atlas containing every letter,
 		// then we return the sprite atlas bitmap to be used as the texture.
 
@@ -121,15 +128,18 @@ public class FontTexture extends Texture {
 		float[] w = new float[2];
 		int charWidthMax = 0;
 		int charWidth;
-		for (char c = (char) charStart; c <= (char) charEnd; c++) {
-			s[0] = c;
-			paint.getTextWidths(s, 0, 1, w);
-			charWidth = (int) Math.ceil(w[0]);
-			// Store it
-			charWidths.put(c, charWidth);
-			if (charWidth > charWidthMax) {
-				// Store max width
-				charWidthMax = charWidth;
+		for (int i = 0; i < charStart.size(); i++) {
+			for (char c = (char) (int) charStart.get(i); c <= (char) (int) charEnd
+					.get(i); c++) {
+				s[0] = c;
+				paint.getTextWidths(s, 0, 1, w);
+				charWidth = (int) Math.ceil(w[0]);
+				// Store it
+				charWidths.put(c, charWidth);
+				if (charWidth > charWidthMax) {
+					// Store max width
+					charWidthMax = charWidth;
+				}
 			}
 		}
 
@@ -155,7 +165,7 @@ public class FontTexture extends Texture {
 			textureSize = 512;
 		else if (maxSize <= 80) // ELSE IF Max Size is 80 or Less
 			textureSize = 1024;
-		else if (maxSize <= 160) // ELSE IF Max Size is 80 or Less
+		else if (maxSize <= 160) // ELSE IF Max Size is 160 or Less
 			textureSize = 2048;
 		else
 			// ELSE IF Max Size is Larger Than 80 (and Less than FONT_SIZE_MAX)
@@ -176,18 +186,21 @@ public class FontTexture extends Texture {
 		characterRects = new SparseArray<Rect>();
 		int x = 0;
 		int y = 0;
-		for (char c = (char) charStart; c <= (char) charEnd; c++) {
-			// Draw char
-			s[0] = c;
-			canvas.drawText(s, 0, 1, x+padX, y + cellHeight - padY, paint);
-			// Store source rectangle
-			characterRects.put((int) c, new Rect(x, y, x + cellWidth, y
-					+ cellHeight));
-			// Increment and wrap at end of line
-			x += cellWidth;
-			if ((x + cellWidth) > textureSize) {
-				x = 0;
-				y += cellHeight;
+		for (int i = 0; i < charStart.size(); i++) {
+			for (char c = (char) (int) charStart.get(i); c <= (char) (int) charEnd
+					.get(i); c++) {
+				// Draw char
+				s[0] = c;
+				canvas.drawText(s, 0, 1, x + padX, y + cellHeight - padY, paint);
+				// Store source rectangle
+				characterRects.put((int) c, new Rect(x, y, x + cellWidth, y
+						+ cellHeight));
+				// Increment and wrap at end of line
+				x += cellWidth;
+				if ((x + cellWidth) > textureSize) {
+					x = 0;
+					y += cellHeight;
+				}
 			}
 		}
 

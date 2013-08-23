@@ -1,6 +1,6 @@
 package com.twicecircled.spritebatcher;
 
-import android.content.res.Resources;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.util.SparseArray;
@@ -101,6 +101,6 @@ public abstract class Texture {
 
 	// Get bitmap object. Note this must decoded on the fly and recycled so that
 	// it is not ever held in memory
-	protected abstract Bitmap getBitmap(Resources resources);
+	protected abstract Bitmap getBitmap(Context context);
 
 }

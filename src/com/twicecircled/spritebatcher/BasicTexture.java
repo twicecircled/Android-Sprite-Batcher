@@ -1,6 +1,6 @@
 package com.twicecircled.spritebatcher;
 
-import android.content.res.Resources;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
@@ -12,7 +12,7 @@ public class BasicTexture extends Texture {
 	}
 
 	@Override
-	protected Bitmap getBitmap(Resources resources) {
-		return BitmapFactory.decodeResource(resources, bitmapId);
+	protected Bitmap getBitmap(Context context) {
+		return BitmapFactory.decodeResource(context.getResources(), bitmapId);
 	}
 }
