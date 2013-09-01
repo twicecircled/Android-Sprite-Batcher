@@ -2,6 +2,16 @@ Android-Sprite-Batcher
 ======================
 Sprite Batcher is a tool to help draw 2D sprites in Android using OpenGL. It handles all the interaction with the OpenGL client and offers you a set of simple draw() methods to handle all your drawing needs.
 
+**Features**
+
+1. Draw sprites with OpenGL with less than 10 lines of code
+2. Batches sprites together to optimise performance
+3. Range of draw methods including rotation and scaling options
+4. ARGB colour transformations (Warning: Reduces efficiency)
+5. Generate sprite atlas from font for drawing text
+6. Draw point to point lines with repeated patterns (1D)
+7. Draw tiled texture with repeated pattern (2D) \*\***EXPERIMENTAL**\*\*
+
 **Getting SpriteBatcher**
 
 Get a copy of the repo by either:
@@ -28,6 +38,20 @@ Watch the videos below to find out how to use SpriteBatcher.
 
 *NB: The first 1m40s of the first video shows you how to grab the code from my personal website www.ionage.co.uk. As you have already got the code from GitHub you can skip that bit.*
 
-[Video 1](http://youtu.be/xc93rN2CGNw "How to use SpriteBatcher 1")
+[Tutorial pt 1 - The Basics](http://www.youtube.com/watch?v=Pv9GwRVbODE "How to use SpriteBatcher 1")
 
-[Video 2](http://youtu.be/cCTi0xvlXGY "How to use SpriteBatcher 2")
+[Tutorial pt 2 - Ordering Sprites](http://www.youtube.com/watch?v=43_j-rapMug "How to use SpriteBatcher 2")
+
+... more coming soon, I'm trying to release 1 per week.
+
+**Hints and Tips**
+
+Like all implementations of openGL some devices don't like it if you provide non-power 2 textures ie 256x256 512x512 1024x1024 etc. If your sprites are being drawn as white squares then:
+
+* Make sure you are using power 2 textures (they don't have to be square ie 256x512 is fine)
+* Make sure your textures are in the drawable-nodpi folder, so Android does not scale them
+
+If you run into "java.lang.IllegalArgumentExcep­tion: No config chosen" then try the following code before called setRenderer():
+```java
+glSurfaceView.setEGLConfigChoo­ser(8, 8, 8, 8, 16, 0); 
+```
