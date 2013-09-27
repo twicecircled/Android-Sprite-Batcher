@@ -5,7 +5,6 @@ import java.util.ArrayList;
 public class FontParams {
 	// Hold the parameters of a particular font.
 	private int size = 24; // default
-	private int argb = 0xffffffff; // default = white
 	private ArrayList<Integer> charStart = new ArrayList<Integer>();
 	private ArrayList<Integer> charEnd = new ArrayList<Integer>();
 	private int charUnknown = 32; // defaut = space
@@ -32,20 +31,6 @@ public class FontParams {
 	 */
 	public FontParams size(int size) {
 		this.size = size;
-		return this;
-	}
-
-	/**
-	 * Change the font's argb colour value.
-	 * 
-	 * @param argb
-	 *            Hex representation of argb number. e.g. 0xFF0000FF for opaque
-	 *            blue text. You can use Android's Color to generate these on
-	 *            your behalf.
-	 * @return this FontParams object
-	 */
-	public FontParams argb(int argb) {
-		this.argb = argb;
 		return this;
 	}
 
@@ -124,10 +109,6 @@ public class FontParams {
 
 	protected int getSize() {
 		return size;
-	}
-
-	protected int getArgb() {
-		return argb;
 	}
 
 	protected ArrayList<Integer> getCharStart() {

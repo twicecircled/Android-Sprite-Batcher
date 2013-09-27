@@ -49,7 +49,6 @@ public class FontTexture extends Texture {
 
 	protected void setParams(FontParams params) {
 		this.size = params.getSize();
-		this.colour = params.getArgb();
 		this.charStart = params.getCharStart();
 		this.charEnd = params.getCharEnd();
 		this.charUnknown = params.getCharUnknown();
