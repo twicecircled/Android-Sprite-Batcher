@@ -1,6 +1,7 @@
 Android-Sprite-Batcher
-By Tim Wicksteed
 ======================
+By Tim Wicksteed
+
 Sprite Batcher is a tool to help draw 2D sprites in Android using OpenGL. It handles all the interaction with the OpenGL client and offers you a set of simple draw() methods to handle all your drawing needs.
 
 **Features**
