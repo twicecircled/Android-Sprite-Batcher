@@ -1,4 +1,4 @@
-/* Sprite Batcher V1.1
+/* Sprite Batcher V1.31
    Copyright (c) 2013 Tim Wicksteed <tim@twicecircled.com>
    http:/www.twicecircled.com
 
